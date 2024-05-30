@@ -1,0 +1,4 @@
+github.com/hashicorp/go-version v1.7.0 h1:5tqGy27NaOTB8yJKUZELlFAS/LTKJkrmONwQKeRZfjY=
+github.com/hashicorp/go-version v1.7.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
+github.com/shyim/go-version v0.0.0-20240530110323-4b7091cee42c h1:3venOxJzcKW4Xi5N9ipFNrnwAS4g1yTOTcBssDHHgQA=
+github.com/shyim/go-version v0.0.0-20240530110323-4b7091cee42c/go.mod h1:z47ygE4N7EC0H58FP5j5cXZtl1pSnfjwYJsHtiVtcwU=
