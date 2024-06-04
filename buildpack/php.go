@@ -2,17 +2,29 @@ package buildpack
 
 import (
 	"fmt"
-	"github.com/shyim/go-version"
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/shyim/go-version"
 )
 
 type ComposerLock struct {
 	Platform map[string]string `json:"platform"`
 	Packages []struct {
+		Name    string            `json:"name"`
 		Require map[string]string `json:"require"`
 	} `json:"packages"`
+}
+
+func (l ComposerLock) HasPackage(packageName string) bool {
+	for _, pkg := range l.Packages {
+		if pkg.Name == packageName {
+			return true
+		}
+	}
+
+	return false
 }
 
 type ComposerJson struct {
@@ -20,6 +32,7 @@ type ComposerJson struct {
 	Replace map[string]string `json:"replace"`
 	Extra   struct {
 		Buildpack struct {
+			Variant    string            `json:"variant"`
 			Extensions []string          `json:"extensions"`
 			Ini        map[string]string `json:"ini"`
 			Env        map[string]string `json:"env"`
@@ -55,13 +68,23 @@ func generateByPHP(project string) (*GeneratedImageResult, error) {
 
 	phpVersion := detectPHPVersion(composerLock)
 
+	imageVersion := phpVersion
+
+	if composerJson.Extra.Buildpack.Variant == "" {
+		composerJson.Extra.Buildpack.Variant = "nginx"
+	}
+
+	if composerJson.Extra.Buildpack.Variant == "frankenphp" {
+		phpVersion = fmt.Sprintf("frankenphp-%s", phpVersion)
+	}
+
 	phpPackages, err := getRequiredPHPPackages(phpVersion, composerJson, composerLock)
 
 	if err != nil {
 		return nil, err
 	}
 
-	result.AddLine("FROM ghcr.io/shyim/wolfi-php/nginx:%s as builder", phpVersion)
+	result.AddLine("FROM ghcr.io/shyim/wolfi-php/%s:%s as builder", composerJson.Extra.Buildpack.Variant, imageVersion)
 	result.AddLine("RUN apk add --no-cache composer %s php-%s-phar \\\n php-%s-openssl \\\n php-%s-curl \\\n unzip", strings.Join(phpPackages, " \\\n "), phpVersion, phpVersion, phpVersion)
 	result.NewLine()
 
@@ -71,10 +94,31 @@ func generateByPHP(project string) (*GeneratedImageResult, error) {
 
 	result.NewLine()
 
-	result.AddLine("FROM ghcr.io/shyim/wolfi-php/nginx:%s", phpVersion)
+	result.AddLine("FROM ghcr.io/shyim/wolfi-php/%s:%s", composerJson.Extra.Buildpack.Variant, imageVersion)
+
+	if composerJson.Extra.Buildpack.Variant == "frankenphp" {
+		if composerLock.HasPackage("runtime/frankenphp-symfony") {
+			result.AddLine("ENV APP_RUNTIME=Runtime\\\\FrankenPhpSymfony\\\\Runtime FRANKENPHP_CONFIG=\"worker ./public/index.php\"")
+		}
+
+		result.AddLine("ENV SERVER_NAME :8000")
+		result.AddLine("RUN \\")
+		result.AddLine("    mkdir -p /data/caddy && mkdir -p /config/caddy; \\")
+		result.AddLine("    apk add --no-cache libcap-utils; \\")
+		result.AddLine("		adduser -u 82 -D www-data; \\")
+		result.AddLine("    	setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/frankenphp; \\")
+		result.AddLine("    	chown -R www-data:www-data /data/caddy && chown -R www-data:www-data /config/caddy; \\")
+		result.AddLine("    apk del libcap-utils")
+	}
+
 	result.AddLine("RUN apk add --no-cache curl \\\n %s", strings.Join(phpPackages, " \\\n "))
 	result.NewLine()
-	result.AddLine("COPY --from=builder --chown=82:82 /var/www/html /var/www/html")
+
+	if composerJson.Extra.Buildpack.Variant == "frankenphp" {
+		result.AddLine("COPY --from=builder --chown=82:82 /var/www/html /app")
+	} else {
+		result.AddLine("COPY --from=builder --chown=82:82 /var/www/html /var/www/html")
+	}
 
 	if len(composerJson.Extra.Buildpack.Ini) > 0 {
 		result.AddLine("COPY <<EOF /etc/php/conf.d/zz-custom.ini")
