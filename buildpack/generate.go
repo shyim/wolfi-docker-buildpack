@@ -36,5 +36,9 @@ func GenerateImageFile(project string) (*GeneratedImageResult, error) {
 		return generateByPHP(project)
 	}
 
+	if _, err := os.Stat(path.Join(project, "go.mod")); err == nil {
+		return generateByGolang(project)
+	}
+
 	return nil, fmt.Errorf("unknown project type")
 }
